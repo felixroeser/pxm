@@ -66,6 +66,4 @@ class TestMeme < Minitest::Unit::TestCase
     assert_equal "{}", res.body
   end
 
-
-
 end
