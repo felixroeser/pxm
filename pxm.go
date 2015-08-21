@@ -11,6 +11,7 @@ import (
 
   "github.com/felixroeser/pxm/lib"
   "github.com/felixroeser/pxm/lib/storage"
+  "github.com/felixroeser/pxm/lib/roles"
 )
 
 func main() {
@@ -48,22 +49,47 @@ func main() {
     }
   }
   
-  for _, mode := range flag.Args() {
-    log.Printf("* starting %s", mode)
+  started := 0 
+  var stoppers []chan bool
+  sigs := make(chan os.Signal)
+  done := make(chan bool, 1)
+  signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+  for _, m := range flag.Args() {
+    switch m {
+      case "dummy":
+        log.Println("* Starting endless dummy")
+        c := make(chan bool)
+        go lib.X(c, done)
+        stoppers = append(stoppers, c)
+        started = started + 1        
+      case "mxpsink":
+        ms := roles.MxpSink{context.Cfg.Mxpsink.IPort, 0}
+        c := make(chan bool)
+        go ms.Start(c, done)
+        stoppers = append(stoppers, c)        
+        started = started + 1
+      case "mxpstream":
+        log.Println("* mxp stream to be implemented")
+      case "debug":
+       log.Println("* debug mode to be implemented")
+      default:
+        log.Println("* unknown mode", m)
+    }
+    
+  }
+  
+  fmt.Println("Waiting until the sun goes down...")
+
+  _ = <-sigs
+  
+  for i := range stoppers {
+    stoppers[i] <- true
+  }
+  
+  for c := 0; c < started; c++ {
+    <- done
   }
   
   os.Exit(0)
-
-  sigs := make(chan os.Signal, 1)
-  done := make(chan bool, 1)
-
-  signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-  go lib.X(sigs, done)
-
-  fmt.Println("awaiting signal")
-  for c := 0; c < 1; c++ {
-    <- done
-  }
-  fmt.Println("exiting")
 }

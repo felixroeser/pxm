@@ -1,0 +1,37 @@
+GIT
+  remote: git@github.com:felixroeser/mixpanel-ruby.git
+  revision: 14055d4d609519131a6347a1415117f9445b6e69
+  specs:
+    mixpanel-ruby (2.2.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    cassandra-driver (2.1.4)
+      ione (~> 1.2)
+    domain_name (0.5.24)
+      unf (>= 0.0.5, < 1.0.0)
+    http-cookie (1.0.2)
+      domain_name (~> 0.5)
+    ione (1.2.1)
+    mime-types (2.6.1)
+    minitest (5.8.0)
+    netrc (0.10.3)
+    parseconfig (1.0.6)
+    rest-client (1.8.0)
+      http-cookie (>= 1.0.2, < 2.0)
+      mime-types (>= 1.16, < 3.0)
+      netrc (~> 0.7)
+    unf (0.1.4)
+      unf_ext
+    unf_ext (0.0.7.1)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  cassandra-driver
+  minitest
+  mixpanel-ruby!
+  parseconfig
+  rest-client

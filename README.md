@@ -17,3 +17,13 @@ $ CREATE KEYSPACE sink_development WITH REPLICATION = { 'class' : 'SimpleStrateg
 ````
 go run pxm.go --config=config/development.ini
 ````
+
+### test
+
+just a ruby based smoke/integration test for now
+
+````
+cd contrib
+bundle install --path vendor/bundle
+ruby -Ilib:test test.rb
+````

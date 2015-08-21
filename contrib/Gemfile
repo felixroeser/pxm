@@ -1,0 +1,7 @@
+source "https://rubygems.org"
+
+gem "minitest"
+gem "parseconfig"
+gem "cassandra-driver"
+gem "rest-client"
+gem "mixpanel-ruby", git: 'git@github.com:felixroeser/mixpanel-ruby.git'
