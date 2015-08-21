@@ -22,15 +22,15 @@ func Connect() (session *gocql.Session, err error) {
 	return 
 }
 
-func execWriteQuery(stmt string, args ...interface{}) (error) {
+func ExecWriteQuery(stmt string, args ...interface{}) (error) {
 	c, _ := lib.GetContext()
-	return c.Session.Query(stmt).Exec()
+	return c.Session.Query(stmt, args...).Exec()
 }
 
 func Drop() {
 	for _, t := range allTables {
 		stmt := fmt.Sprintf("DROP TABLE IF EXISTS %s", t)
-		if err := execWriteQuery(stmt); err != nil {
+		if err := ExecWriteQuery(stmt); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -100,7 +100,7 @@ func Migrate() {
 	}
 
 	for _, stmt := range statements {
-		if err := execWriteQuery(stmt); err != nil {
+		if err := ExecWriteQuery(stmt); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -109,7 +109,7 @@ func Migrate() {
 func Flush() {
 	for _, t := range allTables {
 		stmt := fmt.Sprintf("TRUNCATE %s", t)
-		if err := execWriteQuery(stmt); err != nil {
+		if err := ExecWriteQuery(stmt); err != nil {
 			log.Fatal(err)
 		}
 	}

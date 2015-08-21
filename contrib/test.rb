@@ -1,6 +1,7 @@
 require 'bundler/setup'
 require 'rest-client'
 require 'json'
+require 'base64'
 require 'open-uri'
 require 'mixpanel-ruby'
 require 'minitest/autorun'
@@ -24,10 +25,10 @@ class TestMeme < Minitest::Unit::TestCase
     @host = "http://localhost:#{@config['mxpsink']['port']}"
     @token = @config['tokens']['trusted']
 
-    mixpanel = Mixpanel::Consumer.new(*%i(track engage import).map { |s| "#{@host}/#{s}" })
-    error_handler = ErrorHandler.new
-    @tracker = Mixpanel::Tracker.new(@token, error_handler) do |type, message|
-      mixpanel.send!(type, message)
+    @mixpanel_consumer = Mixpanel::Consumer.new(*%i(track engage import).map { |s| "#{@host}/#{s}" })
+    @mixpanel_error_handler = ErrorHandler.new
+    @tracker = Mixpanel::Tracker.new(@token, @mixpanel_error_handler) do |type, message|
+      @mixpanel_consumer.send!(type, message)
     end
 
     # http://datastax.github.io/ruby-driver/api/#cluster-class_method
@@ -47,6 +48,18 @@ class TestMeme < Minitest::Unit::TestCase
       @session.execute("TRUNCATE #{table}")
     end
   end
+  
+  def find_beacons(by_did: false)
+    table = by_did ? 'beacons_by_did' : 'beacons'
+    @session.execute("SELECT * FROM #{table}")
+  end
+  
+  def assert_beacon(h, beacon)
+    assert_equal 'pi', beacon['event']
+    assert_equal 'a', beacon['properties']['product']
+    assert_equal 'product_page', beacon['properties']['page']
+    assert_equal h[:time].to_i, beacon['request_id'].to_time.to_i if h[:time]
+  end
 
   #
   # var tests
@@ -64,6 +77,79 @@ class TestMeme < Minitest::Unit::TestCase
     res = RestClient.get("#{@host}/")
     assert_equal 200, res.code
     assert_equal "{}", res.body
+  end
+  
+  def test_mxpsink_post_beacon_with_time
+    flush! 
+    time = Time.now.to_i - 3
+    response = @tracker.track('a_random_user', 'pi', {page: "product_page", product: 'a', time: time})
+    assert_equal true, response
+    sleep 0.1
+    
+    [find_beacons, find_beacons(by_did: true)].map(&:to_a).each do |beacons|
+      assert_equal 1, beacons.size
+      assert_beacon({}, beacons[0])
+    end
+  end
+  
+  def test_mxpsink_post_beacon_missing_time
+    skip "tbi"
+    response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
+    assert_equal true, response
+  end
+  
+  def test_mxpsink_post_beacon_with_time_60_seconds_ago
+    skip "tbi"
+    response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
+    assert_equal true, response
+  end
+
+  
+  def test_mxpsink_post_beacon_missing_token
+    skip "tbi"
+    response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
+    assert_equal true, response
+  end
+
+  def test_mxpsink_post_beacon_wrong_token
+    skip "tbi"
+    response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
+    assert_equal true, response
+  end
+  
+  def test_mxpsink_get_beacon
+    flush!
+    
+    data = {
+      event: "pi",
+      properties: {
+        distinct_id: "a_random_user",
+        token: "bbbb",
+        time: 1440169735,
+        page: "product_page",
+        product: "a"
+      }
+    }
+    
+    params = {
+      data: Base64.encode64(data.to_json),
+      verbose: 1
+    }
+    
+    response = RestClient.get("#{@host}/track", params: params)
+    assert_equal 200, response.code    
+    assert_equal 1, JSON.parse(response.body)['status']
+    assert       JSON.parse(response.body)['error'].nil?
+    sleep 0.1
+    
+    [find_beacons, find_beacons(by_did: true)].map(&:to_a).each do |beacons|
+      assert_equal 1, beacons.size
+      assert_beacon({}, beacons[0])
+    end
+  end
+  
+  def test_mxpsink_get_multiple_beacons
+    skip "tbi"
   end
 
 end

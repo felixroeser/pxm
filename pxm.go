@@ -64,7 +64,7 @@ func main() {
         stoppers = append(stoppers, c)
         started = started + 1        
       case "mxpsink":
-        ms := roles.MxpSink{context.Cfg.Mxpsink.IPort, 0}
+        ms := roles.MxpSinkFactory(context)
         c := make(chan bool)
         go ms.Start(c, done)
         stoppers = append(stoppers, c)        
