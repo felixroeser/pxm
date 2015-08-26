@@ -1,5 +1,5 @@
 GIT
-  remote: git@github.com:felixroeser/mixpanel-ruby.git
+  remote: https://github.com/felixroeser/mixpanel-ruby.git
   revision: 14055d4d609519131a6347a1415117f9445b6e69
   specs:
     mixpanel-ruby (2.2.0)
@@ -35,3 +35,6 @@ DEPENDENCIES
   mixpanel-ruby!
   parseconfig
   rest-client
+
+BUNDLED WITH
+   1.10.6

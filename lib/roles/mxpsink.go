@@ -39,7 +39,7 @@ type trackRequest struct {
 type VerboseTrackResponse struct {
 	Status     int      `json:"status"`
 	RequestIDs []string `json:"request_ids"`
-	Error      string
+	Error      string   `json:"error"`
 }
 
 type IncomingBeacon struct {
@@ -73,9 +73,6 @@ func (b *Beacon) ForInsert() []interface{} {
 }
 
 func parseQueryPayload(q url.Values) (incomingBeacons []IncomingBeacon, verbose bool, returnErr error) {
-
-	// log.Println(q)
-
 	for _, a := range q["verbose"] {
 		if a == "1" || a == "true" {
 			verbose = true
@@ -84,7 +81,6 @@ func parseQueryPayload(q url.Values) (incomingBeacons []IncomingBeacon, verbose 
 
 	for _, encoded := range q["data"] {
 		data, _ := base64.StdEncoding.DecodeString(encoded)
-		// log.Println(string(data))
 
 		// single or array? https://groups.google.com/forum/#!topic/golang-nuts/rKVn8coJMlQ
 		err := json.Unmarshal(data, &incomingBeacons)
@@ -103,11 +99,79 @@ func parseQueryPayload(q url.Values) (incomingBeacons []IncomingBeacon, verbose 
 	return
 }
 
+func trustLevelForEvent(event string) string {
+	c, _ := lib.GetContext()
+	
+	// dedicated setting available?
+	if dedicated, ok := c.Cfg.Beacons[event]; ok {
+		return dedicated.Policy
+	}
+	
+	// retrun the default
+	return c.Cfg.Policy.Beacons	
+}
+
+func trustLevelForToken(token string) (string, error) {
+	c, _ := lib.GetContext()
+		
+	// FIXME cache the lookup map
+	var m = map[string]([]string){
+		"admin": c.Cfg.Tokens.Admin,
+		"trusted": c.Cfg.Tokens.Trusted,
+		"untrusted": c.Cfg.Tokens.Untrusted,
+	}
+
+	var lookup = map[string]string {}
+	
+	for policy, tokens := range m {
+		for _, t := range tokens {
+			lookup[t] = policy
+		}
+	}
+
+	if p, ok := lookup[token]; ok {
+		return p, nil
+	} else {
+		return "", errors.New("unknown token")
+	}
+	
+	return "", errors.New("unknown token")
+}
+
+func checkTokens(incomingBeacons *[]IncomingBeacon) (err error) {
+	for _, ib := range *incomingBeacons {
+		
+		if token, ok := ib.Properties.(map[string]interface{})["token"]; ok && len(token.(string)) > 0 {
+			sollTrust := trustLevelForEvent(ib.Event)
+			istTrust, err := trustLevelForToken(token.(string))
+			
+			if err != nil {
+				return err
+			}			
+			
+			if istTrust == "admin" {
+				continue
+			} else if istTrust == "trusted" && sollTrust != "admin" {
+				continue
+			} else if istTrust == "untrusted" && sollTrust == "untrusted" {
+				continue
+			}
+			
+			return errors.New( fmt.Sprintf("token %s is %s but %s needed!", token.(string), istTrust, sollTrust) )
+		} else {
+			err = errors.New("missing token")
+			return
+		}
+		
+	}
+	
+	return
+}
+
 func beaconsFromIncomingBeacons(incomingBeacons *[]IncomingBeacon, tr trackRequest) (beacons []Beacon, aliases []AliasRequest) {
 	for _, ib := range *incomingBeacons {
 		p := ib.Properties.(map[string]interface{})
 
-		// TODO check token
 		delete(p, "token")
 
 		// special handling for the $create_alias event
@@ -264,24 +328,35 @@ func (m *MxpSink) trackPostHandler(rw http.ResponseWriter, r *http.Request) {
 func (m *MxpSink) trackRequestHandler(rw *http.ResponseWriter, tr trackRequest) {
 	var beacons []Beacon
 	// var aliases []AliasRequest
+	var err error
 
 	incomingBeacons, verbose, err := parseQueryPayload(tr.q)
 
-	if err == nil {
+	if err == nil {		
+		
+		if err = checkTokens(&incomingBeacons); err != nil {
+		}
+				
 		beacons, _ = beaconsFromIncomingBeacons(&incomingBeacons, tr)
-	}
-
-	for _, b := range beacons {
-		m.IncomingBeaconChan <- b
+		for _, b := range beacons {
+			m.IncomingBeaconChan <- b
+		}
 	}
 
 	(*rw).Header().Set("Content-Type", "application/json")
 
+	result := 1
+	errOut := ""
+	if err != nil {
+		result = 0
+		errOut = err.Error()
+	}
+
 	if verbose {
-		response := VerboseTrackResponse{1, getRequestIDs(&beacons), ""}
+		response := VerboseTrackResponse{result, getRequestIDs(&beacons), errOut}
 		res, _ := json.Marshal(response)
 		fmt.Fprintf(*rw, string(res))
 	} else {
-		fmt.Fprintf(*rw, "{\"status\": 1}")
+		fmt.Fprintf(*rw, "{\"status\": %d}", result)
 	}
 }

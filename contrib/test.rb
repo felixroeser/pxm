@@ -48,12 +48,12 @@ class TestMeme < Minitest::Unit::TestCase
       @session.execute("TRUNCATE #{table}")
     end
   end
-  
+
   def find_beacons(by_did: false)
     table = by_did ? 'beacons_by_did' : 'beacons'
     @session.execute("SELECT * FROM #{table}")
   end
-  
+
   def assert_beacon(h, beacon)
     assert_equal 'pi', beacon['event']
     assert_equal 'a', beacon['properties']['product']
@@ -73,38 +73,80 @@ class TestMeme < Minitest::Unit::TestCase
   # mxp sink related tests
   #
 
-  def test_mxpsink_root
+  def inactive_test_mxpsink_root
     res = RestClient.get("#{@host}/")
     assert_equal 200, res.code
     assert_equal "{}", res.body
   end
-  
-  def test_mxpsink_post_beacon_with_time
-    flush! 
+
+  def inactive_test_mxpsink_post_beacon_with_time
+    flush!
     time = Time.now.to_i - 3
     response = @tracker.track('a_random_user', 'pi', {page: "product_page", product: 'a', time: time})
     assert_equal true, response
     sleep 0.1
-    
+
     [find_beacons, find_beacons(by_did: true)].map(&:to_a).each do |beacons|
       assert_equal 1, beacons.size
       assert_beacon({}, beacons[0])
     end
   end
-  
+
   def test_mxpsink_post_beacon_missing_time
     skip "tbi"
     response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
     assert_equal true, response
   end
-  
+
   def test_mxpsink_post_beacon_with_time_60_seconds_ago
     skip "tbi"
     response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
     assert_equal true, response
   end
-
   
+  def test_mxp_post_beacon_missing_token
+    @tracker = Mixpanel::Tracker.new("", @mixpanel_error_handler) do |type, message|
+      @mixpanel_consumer.send!(type, message)
+    end
+    
+    response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
+    assert_equal false, response
+  end
+  
+  def test_mxp_post_beacon_untrusted_token_for_trusted
+    @tracker = Mixpanel::Tracker.new("12345", @mixpanel_error_handler) do |type, message|
+      @mixpanel_consumer.send!(type, message)
+    end
+    
+    response = @tracker.track('a_random_user', 'signed_up', {})
+    assert_equal false, response
+  end
+  
+  def test_mxp_post_beacon_admin_token_for_trusted
+    @tracker = Mixpanel::Tracker.new("alsosupersecret", @mixpanel_error_handler) do |type, message|
+      @mixpanel_consumer.send!(type, message)
+    end
+    
+    assert @tracker.track('a_random_user', 'signed_up', {})
+  end
+
+  def test_mxp_post_beacon_admin_token_for_admin
+    @tracker = Mixpanel::Tracker.new("alsosupersecret", @mixpanel_error_handler) do |type, message|
+      @mixpanel_consumer.send!(type, message)
+    end
+    
+    assert @tracker.track('a_random_user', 'flush', {})
+  end
+  
+  def test_mxp_post_beacon_trusted_token_for_trusted
+    assert !@tracker.track('a_random_user', 'flush', {})
+  end
+  
+  def test_mxp_post_beacon_trusted_token_for_untrusted
+    assert !@tracker.track('a_random_user', 'flush', {})
+  end
+
+
   def test_mxpsink_post_beacon_missing_token
     skip "tbi"
     response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
@@ -116,10 +158,10 @@ class TestMeme < Minitest::Unit::TestCase
     response = @tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
     assert_equal true, response
   end
-  
+
   def test_mxpsink_get_beacon
     flush!
-    
+
     data = {
       event: "pi",
       properties: {
@@ -130,24 +172,24 @@ class TestMeme < Minitest::Unit::TestCase
         product: "a"
       }
     }
-    
+
     params = {
       data: Base64.encode64(data.to_json),
       verbose: 1
     }
-    
+
     response = RestClient.get("#{@host}/track", params: params)
-    assert_equal 200, response.code    
+    assert_equal 200, response.code
     assert_equal 1, JSON.parse(response.body)['status']
-    assert       JSON.parse(response.body)['error'].nil?
+    assert       JSON.parse(response.body)['error'].size == 0
     sleep 0.1
-    
+
     [find_beacons, find_beacons(by_did: true)].map(&:to_a).each do |beacons|
       assert_equal 1, beacons.size
       assert_beacon({}, beacons[0])
     end
   end
-  
+
   def test_mxpsink_get_multiple_beacons
     skip "tbi"
   end
