@@ -159,12 +159,9 @@ func checkTokens(incomingBeacons *[]IncomingBeacon) (err error) {
 			
 			return errors.New( fmt.Sprintf("token %s is %s but %s needed!", token.(string), istTrust, sollTrust) )
 		} else {
-			err = errors.New("missing token")
-			return
-		}
-		
+			return errors.New("missing token")
+		}		
 	}
-	
 	return
 }
 
@@ -334,12 +331,11 @@ func (m *MxpSink) trackRequestHandler(rw *http.ResponseWriter, tr trackRequest) 
 
 	if err == nil {		
 		
-		if err = checkTokens(&incomingBeacons); err != nil {
-		}
-				
-		beacons, _ = beaconsFromIncomingBeacons(&incomingBeacons, tr)
-		for _, b := range beacons {
-			m.IncomingBeaconChan <- b
+		if err = checkTokens(&incomingBeacons); err == nil {				
+			beacons, _ = beaconsFromIncomingBeacons(&incomingBeacons, tr)
+			for _, b := range beacons {
+				m.IncomingBeaconChan <- b
+			}
 		}
 	}
 
