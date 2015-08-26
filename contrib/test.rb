@@ -95,6 +95,7 @@ class TestMeme < Minitest::Unit::TestCase
     flush!
     time = Time.now.to_i
     assert @tracker.track('a_random_user', 'pi', {page: "product_page", product: 'a'})
+    sleep 0.05
     [find_beacons, find_beacons(by_did: true)].map(&:to_a).each do |beacons|
       assert_equal 1, beacons.size
       assert_beacon({time: Time.now.to_i}, beacons[0])
@@ -120,7 +121,7 @@ class TestMeme < Minitest::Unit::TestCase
       @mixpanel_consumer.send!(type, message)
     end
     
-    assert !@tracker.track('a_random_user', 'pi', {page: "a_product_page", product: 'a'})
+    assert !@tracker.track('a_random_user', 'pi', {page: "product_page", product: 'a'})
     assert_equal 0, find_beacons.size
   end
   
@@ -204,5 +205,24 @@ class TestMeme < Minitest::Unit::TestCase
   def test_mxpsink_get_multiple_beacons
     skip "tbi"
   end
+  
+    def test_import
+      flush!
+
+      t = Time.utc(2014,1,1,0,1)
+
+      res = 10.times.map do |i|
+        @tracker.import('api_key', 'importer', 'pi', page: "product_page", product: rand(5).to_s, time: (t + i).to_i )
+      end.all?
+
+      assert res
+      sleep 0.05
+
+      beacons = find_beacons
+      assert_equal 10, beacons.size
+      assert_equal ['importer'], beacons.map { |b| b['distinct_id'] }.uniq      
+      assert_equal 10.times.map { |i| t + i },  beacons.map { |b| b['request_id'].to_time }.sort
+    end
+
 
 end

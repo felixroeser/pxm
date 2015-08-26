@@ -254,8 +254,12 @@ func (m *MxpSink) Start(sigs <-chan bool, done chan<- bool) {
 	r := mux.NewRouter().StrictSlash(false)
 
 	r.HandleFunc("/", m.rootHandler).Methods("GET")
+	
 	r.HandleFunc("/track", m.trackGetHandler).Methods("GET")
 	r.HandleFunc("/track", m.trackPostHandler).Methods("POST")
+	
+	r.HandleFunc("/import", m.importGetHandler).Methods("GET")
+	r.HandleFunc("/import", m.importPostHandler).Methods("POST")
 
 	incomingBeaconKiller := make(chan bool)
 	incomingBeaconStopped := make(chan bool)
@@ -304,6 +308,22 @@ func (m *MxpSink) incomingBeaconConsumer(killer, done chan bool) {
 func (m *MxpSink) rootHandler(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(rw, "{}")
+}
+
+func (m *MxpSink) importGetHandler(rw http.ResponseWriter, r *http.Request) {
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	tr := trackRequest{r.URL.Query(), true, ip}
+	m.trackRequestHandler(&rw, tr)
+}
+
+func (m *MxpSink) importPostHandler(rw http.ResponseWriter, r *http.Request) {
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(r.Body)
+	q, _ := url.ParseQuery(buf.String())
+
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	tr := trackRequest{q, true, ip}
+	m.trackRequestHandler(&rw, tr)
 }
 
 func (m *MxpSink) trackGetHandler(rw http.ResponseWriter, r *http.Request) {
