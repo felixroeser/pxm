@@ -20,13 +20,14 @@ import (
 )
 
 func MxpSinkFactory(context *lib.Context) MxpSink {
-	return MxpSink{context.Cfg.Mxpsink.IPort, 0, make(chan Beacon, 500)}
+	return MxpSink{context.Cfg.Mxpsink.IPort, 0, make(chan Beacon, 500), make(chan AliasRequest, 100)}
 }
 
 type MxpSink struct {
 	Port               int
 	State              int
 	IncomingBeaconChan chan Beacon
+	IncomingAliasChan  chan AliasRequest
 }
 
 type trackRequest struct {
@@ -168,15 +169,15 @@ func checkTokens(incomingBeacons *[]IncomingBeacon) (err error) {
 func beaconsFromIncomingBeacons(incomingBeacons *[]IncomingBeacon, tr trackRequest) (beacons []Beacon, aliases []AliasRequest) {
 	for _, ib := range *incomingBeacons {
 		p := ib.Properties.(map[string]interface{})
-
+		
 		delete(p, "token")
-
+		
 		// special handling for the $create_alias event
 		if ib.Event == "$create_alias" {
 			a := AliasRequest{DistinctID: p["distinct_id"].(string), AliasID: p["alias"].(string)}
 			aliases = append(aliases, a)
 			continue
-		}
+		}				
 
 		var t time.Time
 		if f, ok := p["time"]; ok {
@@ -263,13 +264,18 @@ func (m *MxpSink) Start(sigs <-chan bool, done chan<- bool) {
 
 	incomingBeaconKiller := make(chan bool)
 	incomingBeaconStopped := make(chan bool)
+	
+	incomingAliasKiller := make(chan bool)
+	incomingAliasStopped := make(chan bool)	
 
 	go m.incomingBeaconConsumer(incomingBeaconKiller, incomingBeaconStopped)
+	go m.incomingAliasConsumer(incomingAliasKiller, incomingAliasStopped)
 
 	go func() {
 		sig := <-sigs
 		log.Println("Stopping MxpSink", sig)
 		incomingBeaconKiller <- true
+		incomingAliasKiller <- true
 		manners.Close()
 	}()
 
@@ -277,7 +283,8 @@ func (m *MxpSink) Start(sigs <-chan bool, done chan<- bool) {
 		log.Fatal(err)
 	}
 
-	<-incomingBeaconStopped
+	<-incomingAliasStopped
+	<-incomingBeaconStopped	
 
 	done <- true
 }
@@ -302,6 +309,20 @@ func (m *MxpSink) incomingBeaconConsumer(killer, done chan bool) {
 		}
 	}
 
+	done <- true
+}
+
+func (m *MxpSink) incomingAliasConsumer(killer, done chan bool) {
+	c := true
+	
+	for c {
+		select {
+		case d := <-killer:
+			log.Println("incomingAliasConsumer going to stop!", d)
+			c = false			
+		}
+	}
+	
 	done <- true
 }
 
@@ -344,7 +365,7 @@ func (m *MxpSink) trackPostHandler(rw http.ResponseWriter, r *http.Request) {
 
 func (m *MxpSink) trackRequestHandler(rw *http.ResponseWriter, tr trackRequest) {
 	var beacons []Beacon
-	// var aliases []AliasRequest
+	var aliases []AliasRequest
 	var err error
 
 	incomingBeacons, verbose, err := parseQueryPayload(tr.q)
@@ -352,10 +373,15 @@ func (m *MxpSink) trackRequestHandler(rw *http.ResponseWriter, tr trackRequest) 
 	if err == nil {		
 		
 		if err = checkTokens(&incomingBeacons); err == nil {				
-			beacons, _ = beaconsFromIncomingBeacons(&incomingBeacons, tr)
+			beacons, aliases = beaconsFromIncomingBeacons(&incomingBeacons, tr)
 			for _, b := range beacons {
 				m.IncomingBeaconChan <- b
 			}
+			
+			for _, a := range aliases {
+				m.IncomingAliasChan <- a
+			}
+
 		}
 	}
 
